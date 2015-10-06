@@ -34,6 +34,7 @@ OBJECTS = \
 	DebugClient.o \
 	Coord.o \
 	SmallRect.o \
+	ConsoleLine.o \
 	main.o
 
 CXXFLAGS += \
@@ -43,7 +44,7 @@ CXXFLAGS += \
 	-fno-exceptions \
 	-fno-rtti
 
-LDFLAGS += -static-libgcc -static-libstdc++
+LDFLAGS += -static -static-libgcc -static-libstdc++
 
 all : $(PROGRAM)
 

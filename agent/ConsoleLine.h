@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2012 Ryan Prichard
+// Copyright (c) 2015 Ryan Prichard
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -18,35 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-#ifndef TERMINAL_H
-#define TERMINAL_H
+#ifndef CONSOLE_LINE_H
+#define CONSOLE_LINE_H
 
 #include <windows.h>
-#include "Coord.h"
-#include <utility>
 
-class NamedPipe;
+#include <vector>
 
-class Terminal
+class ConsoleLine
 {
 public:
-    explicit Terminal(NamedPipe *output);
-    void reset(bool sendClearFirst, int newLine);
-    void sendLine(int line, CHAR_INFO *lineData, int width);
-    void finishOutput(const std::pair<int, int> &newCursorPos);
-    void setConsoleMode(int mode);
-
+    ConsoleLine();
+    void reset();
+    bool detectChangeAndSetLine(const CHAR_INFO *line, int newLength);
+    void setLine(const CHAR_INFO *line, int newLength);
+    void blank(WORD attributes);
 private:
-    void hideTerminalCursor();
-    void moveTerminalToLine(int line);
-
-private:
-    NamedPipe *m_output;
-    int m_remoteLine;
-    bool m_cursorHidden;
-    std::pair<int, int> m_cursorPos;
-    int m_remoteColor;
-    bool m_consoleMode;
+    int m_prevLength;
+    std::vector<CHAR_INFO> m_prevData;
 };
 
-#endif // TERMINAL_H
+#endif // CONSOLE_LINE_H
