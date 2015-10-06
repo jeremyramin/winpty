@@ -27,7 +27,7 @@
 //
 
 #include "ConsoleLine.h"
-
+#include "algorithm"
 #include "AgentAssert.h"
 
 static CHAR_INFO blankChar(WORD attributes)
