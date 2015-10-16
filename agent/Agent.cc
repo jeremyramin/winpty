@@ -24,9 +24,11 @@
 #include "Terminal.h"
 #include "NamedPipe.h"
 #include "AgentAssert.h"
+#include "ConsoleFont.h"
 #include "../shared/DebugClient.h"
 #include "../shared/AgentMsg.h"
 #include "../shared/Buffer.h"
+#include "../shared/c99_snprintf.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +40,8 @@
 
 const int SC_CONSOLE_MARK = 0xFFF2;
 const int SC_CONSOLE_SELECT_ALL = 0xFFF5;
+
+#define COUNT_OF(x) (sizeof(x) / sizeof((x)[0]))
 
 static BOOL WINAPI consoleCtrlHandler(DWORD dwCtrlType)
 {
@@ -82,19 +86,24 @@ Agent::Agent(LPCWSTR controlPipeName,
     m_bufferData.resize(BUFFER_LINE_COUNT);
 
     m_console = new Win32Console;
-    m_console->setSmallFont();
+    setSmallFont(m_console->conout());
     m_console->moveWindow(SmallRect(0, 0, 1, 1));
     m_console->resizeBuffer(Coord(initialCols, BUFFER_LINE_COUNT));
     m_console->moveWindow(SmallRect(0, 0, initialCols, initialRows));
     m_console->setCursorPosition(Coord(0, 0));
     m_console->setTitle(m_currentTitle);
 
+    // For the sake of the color translation heuristic, set the console color
+    // to LtGray-on-Black.
+    m_console->setTextAttribute(7);
+    m_console->clearAllLines(m_console->bufferInfo());
+
     m_controlSocket = makeSocket(controlPipeName);
     m_dataSocket = makeSocket(dataPipeName);
     m_terminal = new Terminal(m_dataSocket);
     m_consoleInput = new ConsoleInput(this);
 
-    resetConsoleTracking(false);
+    resetConsoleTracking(Terminal::OmitClear, m_console->windowRect());
 
     // Setup Ctrl-C handling.  First restore default handling of Ctrl-C.  This
     // attribute is inherited by child processes.  Then register a custom
@@ -137,7 +146,8 @@ NamedPipe *Agent::makeSocket(LPCWSTR pipeName)
     return pipe;
 }
 
-void Agent::resetConsoleTracking(bool sendClear)
+void Agent::resetConsoleTracking(
+    Terminal::SendClearFlag sendClear, const SmallRect &windowRect)
 {
     for (std::vector<ConsoleLine>::iterator
             it = m_bufferData.begin(), itEnd = m_bufferData.end();
@@ -146,7 +156,7 @@ void Agent::resetConsoleTracking(bool sendClear)
         it->reset();
     }
     m_syncRow = -1;
-    m_scrapedLineCount = m_console->windowRect().top();
+    m_scrapedLineCount = windowRect.top();
     m_scrolledCount = 0;
     m_maxBufferedLine = -1;
     m_dirtyWindowTop = -1;
@@ -351,9 +361,8 @@ void Agent::markEntireWindowDirty(const SmallRect &windowRect)
 
 // Scan the screen buffer and advance the dirty line count when we find
 // non-empty lines.
-void Agent::scanForDirtyLines()
+void Agent::scanForDirtyLines(const SmallRect &windowRect)
 {
-    const SmallRect windowRect = m_console->windowRect();
     CHAR_INFO prevChar;
     if (m_dirtyLineCount >= 1) {
         m_console->read(SmallRect(windowRect.width() - 1,
@@ -526,7 +535,7 @@ void Agent::syncConsoleContentAndSize(bool forceResize)
     const bool newDirectMode = (info.bufferSize().Y != BUFFER_LINE_COUNT);
     if (newDirectMode != m_directMode) {
         trace("Entering %s mode", newDirectMode ? "direct" : "scrolling");
-        resetConsoleTracking();
+        resetConsoleTracking(Terminal::SendClear, info.windowRect());
         m_directMode = newDirectMode;
 
         // When we switch from direct->scrolling mode, make sure the console is
@@ -603,7 +612,7 @@ void Agent::scrollingScrapeOutput(const ConsoleScreenBufferInfo &info)
             trace("Sync marker has disappeared -- resetting the terminal"
                   " (m_syncCounter=%d)",
                   m_syncCounter);
-            resetConsoleTracking();
+            resetConsoleTracking(Terminal::SendClear, windowRect);
         } else if (markerRow != m_syncRow) {
             ASSERT(markerRow < m_syncRow);
             m_scrolledCount += (m_syncRow - markerRow);
@@ -629,13 +638,13 @@ void Agent::scrollingScrapeOutput(const ConsoleScreenBufferInfo &info)
             trace("Window moved upward -- resetting the terminal"
                   " (m_syncCounter=%d)",
                   m_syncCounter);
-            resetConsoleTracking();
+            resetConsoleTracking(Terminal::SendClear, windowRect);
         }
     }
     m_dirtyWindowTop = windowRect.top();
     m_dirtyLineCount = std::max(m_dirtyLineCount, cursor.Y + 1);
     m_dirtyLineCount = std::max(m_dirtyLineCount, (int)windowRect.top());
-    scanForDirtyLines();
+    scanForDirtyLines(windowRect);
 
     // Note that it's possible for all the lines on the current window to
     // be non-dirty.
@@ -702,11 +711,12 @@ void Agent::unfreezeConsole()
     SendMessage(m_console->hwnd(), WM_CHAR, 27, 0x00010001);
 }
 
-void Agent::syncMarkerText(CHAR_INFO *output)
+void Agent::syncMarkerText(CHAR_INFO (&output)[SYNC_MARKER_LEN])
 {
-    char str[SYNC_MARKER_LEN + 1];// TODO: use a random string
-    sprintf(str, "S*Y*N*C*%08x", m_syncCounter);
-    memset(output, 0, sizeof(CHAR_INFO) * SYNC_MARKER_LEN);
+    // XXX: The marker text generated here could easily collide with ordinary
+    // console output.  Does it make sense to try to avoid the collision?
+    char str[SYNC_MARKER_LEN];
+    c99_snprintf(str, COUNT_OF(str), "S*Y*N*C*%08x", m_syncCounter);
     for (int i = 0; i < SYNC_MARKER_LEN; ++i) {
         output[i].Char.UnicodeChar = str[i];
         output[i].Attributes = 7;

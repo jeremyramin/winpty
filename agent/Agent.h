@@ -31,10 +31,10 @@
 #include "Coord.h"
 #include "SmallRect.h"
 #include "ConsoleLine.h"
+#include "Terminal.h"
 
 class Win32Console;
 class ConsoleInput;
-class Terminal;
 class ReadBuffer;
 class NamedPipe;
 struct ConsoleScreenBufferInfo;
@@ -55,7 +55,8 @@ public:
 
 private:
     NamedPipe *makeSocket(LPCWSTR pipeName);
-    void resetConsoleTracking(bool sendClear = true);
+    void resetConsoleTracking(
+        Terminal::SendClearFlag sendClear, const SmallRect &windowRect);
 
 private:
     void pollControlSocket();
@@ -70,7 +71,7 @@ protected:
 
 private:
     void markEntireWindowDirty(const SmallRect &windowRect);
-    void scanForDirtyLines();
+    void scanForDirtyLines(const SmallRect &windowRect);
     void clearBufferLines(int firstRow, int count, WORD attributes);
     void resizeImpl(const ConsoleScreenBufferInfo &origInfo);
     void resizeWindow(int cols, int rows);
@@ -81,7 +82,7 @@ private:
     void reopenConsole();
     void freezeConsole();
     void unfreezeConsole();
-    void syncMarkerText(CHAR_INFO *output);
+    void syncMarkerText(CHAR_INFO (&output)[SYNC_MARKER_LEN]);
     int findSyncMarker();
     void createSyncMarker(int row);
 

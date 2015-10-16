@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2012 Ryan Prichard
+// Copyright (c) 2015 Ryan Prichard
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -18,38 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-#ifndef TERMINAL_H
-#define TERMINAL_H
+#ifndef CONSOLEFONT_H
+#define CONSOLEFONT_H
 
 #include <windows.h>
-#include "Coord.h"
-#include <string>
-#include <utility>
 
-class NamedPipe;
+void setSmallFont(HANDLE conout);
 
-class Terminal
-{
-public:
-    explicit Terminal(NamedPipe *output);
-    enum SendClearFlag { OmitClear, SendClear };
-    void reset(SendClearFlag sendClearFirst, int newLine);
-    void sendLine(int line, CHAR_INFO *lineData, int width);
-    void finishOutput(const std::pair<int, int> &newCursorPos);
-    void setConsoleMode(int mode);
-
-private:
-    void hideTerminalCursor();
-    void moveTerminalToLine(int line);
-
-private:
-    NamedPipe *m_output;
-    int m_remoteLine;
-    bool m_cursorHidden;
-    std::pair<int, int> m_cursorPos;
-    int m_remoteColor;
-    bool m_consoleMode;
-    std::string m_termLine;
-};
-
-#endif // TERMINAL_H
+#endif // CONSOLEFONT_H

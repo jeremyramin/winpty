@@ -50,14 +50,8 @@ public:
     HANDLE conout();
     HWND hwnd();
     void postCloseMessage();
-    void setSmallFont();
-    bool setConsoleFont(const wchar_t *faceName, int pointSize);
-private:
-    bool setSmallConsoleFontXP();
-    bool setSmallConsoleFontVista();
-    void dumpConsoleFont(const char *prefix);
-public:
     void clearLines(int row, int count, const ConsoleScreenBufferInfo &info);
+    void clearAllLines(const ConsoleScreenBufferInfo &info);
 
     // Buffer and window sizes.
     ConsoleScreenBufferInfo bufferInfo();
@@ -81,6 +75,8 @@ public:
     // Title.
     std::wstring title();
     void setTitle(const std::wstring &title);
+
+    void setTextAttribute(WORD attributes);
 
 private:
     HANDLE m_conin;

@@ -1,10 +1,12 @@
 // This file is included into test programs using #include
 
 #include <windows.h>
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
 #include <vector>
+#include <string>
 
 #include "../shared/DebugClient.h"
 
@@ -30,19 +32,23 @@ static void startChildProcess(const wchar_t *args) {
 }
 
 static void setBufferSize(HANDLE conout, int x, int y) {
-    COORD size = { x, y };
+    COORD size = { static_cast<SHORT>(x), static_cast<SHORT>(y) };
     BOOL success = SetConsoleScreenBufferSize(conout, size);
     trace("setBufferSize: (%d,%d), result=%d", x, y, success);
 }
 
 static void setWindowPos(HANDLE conout, int x, int y, int w, int h) {
-    SMALL_RECT r = { x, y, x + w - 1, y + h - 1 };
+    SMALL_RECT r = {
+        static_cast<SHORT>(x), static_cast<SHORT>(y),
+        static_cast<SHORT>(x + w - 1),
+        static_cast<SHORT>(y + h - 1)
+    };
     BOOL success = SetConsoleWindowInfo(conout, /*bAbsolute=*/TRUE, &r);
     trace("setWindowPos: (%d,%d,%d,%d), result=%d", x, y, w, h, success);
 }
 
 static void setCursorPos(HANDLE conout, int x, int y) {
-    COORD coord = { x, y };
+    COORD coord = { static_cast<SHORT>(x), static_cast<SHORT>(y) };
     SetConsoleCursorPosition(conout, coord);
 }
 
@@ -73,9 +79,14 @@ static void writeBox(int x, int y, int w, int h, char ch, int attributes=7) {
     info.Attributes = attributes;
     std::vector<CHAR_INFO> buf(w * h, info);
     HANDLE conout = GetStdHandle(STD_OUTPUT_HANDLE);
-    COORD bufSize = { w, h };
+    COORD bufSize = { static_cast<SHORT>(w), static_cast<SHORT>(h) };
     COORD bufCoord = { 0, 0 };
-    SMALL_RECT writeRegion = { x, y, x + w - 1, y + h - 1 };
+    SMALL_RECT writeRegion = {
+        static_cast<SHORT>(x),
+        static_cast<SHORT>(y),
+        static_cast<SHORT>(x + w - 1),
+        static_cast<SHORT>(y + h - 1)
+    };
     WriteConsoleOutputA(conout, buf.data(), bufSize, bufCoord, &writeRegion);
 }
 
@@ -84,7 +95,7 @@ static void setChar(int x, int y, char ch, int attributes=7) {
 }
 
 static void fillChar(int x, int y, int repeat, char ch) {
-    COORD coord = { x, y };
+    COORD coord = { static_cast<SHORT>(x), static_cast<SHORT>(y) };
     DWORD actual = 0;
     FillConsoleOutputCharacterA(
         GetStdHandle(STD_OUTPUT_HANDLE),
@@ -96,4 +107,46 @@ static void repeatChar(int count, char ch) {
         putchar(ch);
     }
     fflush(stdout);
+}
+
+// I don't know why, but wprintf fails to print this face name,
+// "ＭＳ ゴシック" (aka MS Gothic).  It helps to use wprintf instead of printf, and
+// it helps to call `setlocale(LC_ALL, "")`, but the Japanese symbols are
+// ultimately converted to `?` symbols, even though MS Gothic is able to
+// display its own name, and the current code page is 932 (Shift-JIS).
+static void cvprintf(const wchar_t *fmt, va_list ap) {
+    wchar_t buffer[256];
+    vswprintf(buffer, 256 - 1, fmt, ap);
+    buffer[255] = L'\0';
+    DWORD actual = 0;
+    if (!WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE),
+                       buffer, wcslen(buffer), &actual, NULL)) {
+        wprintf(L"WriteConsoleW call failed!\n");
+    }
+}
+
+static void cprintf(const wchar_t *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    cvprintf(fmt, ap);
+    va_end(ap);
+}
+
+std::string narrowString(const std::wstring &input)
+{
+    int mblen = WideCharToMultiByte(
+        CP_UTF8, 0,
+        input.data(), input.size(),
+        NULL, 0, NULL, NULL);
+    if (mblen <= 0) {
+        return std::string();
+    }
+    std::vector<char> tmp(mblen);
+    int mblen2 = WideCharToMultiByte(
+        CP_UTF8, 0,
+        input.data(), input.size(),
+        tmp.data(), tmp.size(),
+        NULL, NULL);
+    assert(mblen2 == mblen);
+    return std::string(tmp.data(), tmp.size());
 }
